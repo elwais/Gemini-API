@@ -114,6 +114,29 @@ class ChatMixin:
 
         self._recent_chats = recent_chats
 
+    async def refresh_chats(self, recent: int = 13) -> list[ChatInfo] | None:
+        """Fetch the recent-chat list from Gemini again and return it.
+
+        `list_chats()` returns the list fetched during `init()`. Chats created afterwards are only
+        added locally, under a `Chat(<cid>)` placeholder title, so the titles Gemini generates
+        for new chats (and chats changed in another client) appear only after a refresh. This
+        call re-fetches the list without re-initializing the client.
+
+        Parameters
+        ----------
+        recent: `int`, optional
+            Number of recent chats to request (pinned chats are listed in addition).
+
+        Returns
+        -------
+        `list[gemini_webapi.types.ChatInfo] | None`
+            The refreshed list, as `list_chats()` now returns it. `None` if the account
+            status does not allow listing chats.
+
+        """
+        await self._fetch_recent_chats(recent=recent)
+        return self._recent_chats
+
     def list_chats(self) -> list[ChatInfo] | None:
         """List all conversations.
 

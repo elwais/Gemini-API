@@ -292,6 +292,22 @@ async def main():
 asyncio.run(main())
 ```
 
+`list_chats` returns the list fetched during `init()`. Chats you create afterwards are only added locally, with a
+`Chat(<cid>)` placeholder title. To get the titles Gemini generates for them, or changes made in another client,
+fetch the list again with `GeminiClient.refresh_chats`:
+
+```python
+async def main():
+    chat = client.start_chat()
+    await chat.send_message("Plan a three-day trip to Kyoto")
+    await asyncio.sleep(3)  # Gemini names new chats shortly after the first reply
+    for chat_info in await client.refresh_chats():
+        print(f"{chat_info.cid}: {chat_info.title}")
+
+
+asyncio.run(main())
+```
+
 ### Edit a Previous Prompt
 
 Gemini stores a chat as a tree of turns, and editing a prompt in the web app starts a new branch from the reply before it. `ChatSession.rewind` does the same: pass it a turn from `read_chat`, and the next message replaces that turn. The new branch becomes the chat's current one, so the replaced turn and everything after it drop out of `read_chat` and out of the model's context. Sending the original prompt again regenerates the reply.

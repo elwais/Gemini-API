@@ -163,11 +163,13 @@ def _build_client(args):
     client = GeminiClient(
         secure_1psid=psid,
         secure_1psidts=psidts or "",
-        cookies=extra or None,
         proxy=args.proxy,
-        account_index=args.account_index,
+        authuser=args.account_index,
         verify=not args.skip_verify,
     )
+    if extra:
+        # Send the rest of the exported jar too (SID, SAPISID, ...), as the browser does
+        client.cookies = extra
     return client, json_cookies
 
 
@@ -582,7 +584,7 @@ def build_parser():
         "--account-index",
         type=int,
         default=None,
-        help="Google account index",
+        help="Google account index (authuser) when several accounts share the cookies: 0 = first signed in",
     )
     parser.add_argument(
         "--model",

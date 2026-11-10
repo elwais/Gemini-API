@@ -2,6 +2,7 @@ import re
 import time
 from pathlib import Path
 from typing import NamedTuple
+from urllib.parse import urlparse
 
 import orjson as json
 from curl_cffi import CurlFollow, CurlHttpVersion
@@ -71,6 +72,10 @@ class InitSession(NamedTuple):
         "Browser (firefox)", "Guest". A session is accepted as soon as it yields an access
         token, which an unauthenticated one does too, so the caller needs to know which
         group to blame when the session turns out to be unusable.
+    email: `str | None`
+        Address of the signed-in Google account the init page was served for (the "oPEP7c"
+        value), or `None` for guest sessions. Use it to verify that `authuser` selected the
+        intended account.
 
     """
 
@@ -81,6 +86,7 @@ class InitSession(NamedTuple):
     push_id: str | None
     client: AsyncSession
     cookie_source: str
+    email: str | None = None
 
 
 _DOMAIN_NAME = "google.com"
@@ -92,6 +98,37 @@ _BUILD_LABEL_RE = re.compile(r'"cfb2h":\s*"(.*?)"')
 _SESSION_ID_RE = re.compile(r'"FdrFJe":\s*"(.*?)"')
 _LANGUAGE_RE = re.compile(r'"TuX5cc":\s*"(.*?)"')
 _PUSH_ID_RE = re.compile(r'"qKIAYe":\s*"(.*?)"')
+_EMAIL_RE = re.compile(r'"oPEP7c":\s*"(.*?)"')
+_AUTHUSER_PATH_RE = re.compile(r"^/u/(\d+)/")
+
+
+def init_url(authuser: int | None = None) -> str:
+    """Return the init page url for the given multi-login account index.
+
+    Google keeps every account signed in to a browser in one cookie jar and selects one by
+    its index in the sign-in order (`authuser`). Without an index, Google serves the first
+    (default) account.
+    """
+    if authuser is None:
+        return Endpoint.INIT.value
+    return f"https://gemini.google.com/u/{int(authuser)}/app"
+
+
+def served_authuser(response: Response) -> int:
+    """Return the account index the init page was actually served for.
+
+    An index with no account behind it is silently redirected to the default account
+    (`/u/0/app` or `/app`), so this is the way to detect that.
+    """
+    path = urlparse(str(response.url)).path
+    match = _AUTHUSER_PATH_RE.match(path)
+    return int(match.group(1)) if match else 0
+
+
+def extract_email(response: Response) -> str | None:
+    """Return the signed-in account address from an init page, or `None` on guest pages."""
+    match = _EMAIL_RE.search(response.text)
+    return match.group(1) if match and "@" in match.group(1) else None
 
 
 def _jar_signature(jar: Cookies) -> frozenset[tuple[str, str]]:
@@ -204,7 +241,10 @@ def _fill_missing(jar: Cookies, extra: Cookies) -> Cookies:
 
 
 async def _send_request(
-    client: AsyncSession, cookies: dict | Cookies, verbose: bool = False
+    client: AsyncSession,
+    cookies: dict | Cookies,
+    verbose: bool = False,
+    authuser: int | None = None,
 ) -> Response:
     """Send http request with provided cookies using a shared session."""
     client.cookies.clear()
@@ -214,10 +254,11 @@ async def _send_request(
         for k, v in cookies.items():
             client.cookies.set(k, v, domain=_COOKIE_DOMAIN, secure=True)
 
-    response = await client.get(Endpoint.INIT, headers=Headers.GEMINI.value)
+    url = init_url(authuser)
+    response = await client.get(url, headers=Headers.GEMINI.value)
     if verbose:
         logger.debug(
-            f"HTTP Request: GET {Endpoint.INIT} [{response.status_code}] (HTTP/{format_http_version(response.http_version)})"
+            f"HTTP Request: GET {url} [{response.status_code}] (HTTP/{format_http_version(response.http_version)})"
         )
     response.raise_for_status()
     return response
@@ -250,6 +291,7 @@ async def get_access_token(
     verbose: bool = False,
     impersonate: BrowserTypeLiteral = BROWSER_TYPE,
     verify: bool = True,
+    authuser: int | None = None,
 ) -> InitSession:
     """Send a get request to gemini.google.com for each group of available cookies and return
     the value of "SNlM0e" as access token on the first successful request.
@@ -276,6 +318,11 @@ async def get_access_token(
         Allow to customize client, default to BROWSER_TYPE.
     verify: `bool`, optional
         Whether to verify SSL certificates.
+    authuser: `int`, optional
+        Index of the Google account to use when several accounts are signed in to the same
+        cookie jar (multi-login), in browser sign-in order. `None` uses the default account.
+        If no account exists at that index, `AuthError` is raised instead of silently
+        falling back to the default account.
 
     Returns
     -------
@@ -428,7 +475,9 @@ async def get_access_token(
                 attempts += 1
 
                 async def _send(target_jar: Cookies = jar) -> Response:
-                    return await _send_request(client, target_jar, verbose=verbose)
+                    return await _send_request(
+                        client, target_jar, verbose=verbose, authuser=authuser
+                    )
 
                 def _on_retry(
                     e: Exception,
@@ -461,9 +510,17 @@ async def get_access_token(
                                     f"Init attempt ({attempts}) from {group_name} returned no access token (unauthenticated)."
                                 )
                             continue
+                        if authuser is not None and access_token:
+                            served = served_authuser(response)
+                            if served != authuser:
+                                raise AuthError(
+                                    f"No Google account is signed in at authuser={authuser} "
+                                    f"(Google served authuser={served} instead). Sign in to the "
+                                    "account in the browser, or use a lower index."
+                                )
                         if verbose:
                             logger.debug(f"Init attempt ({attempts}) from {group_name} succeeded.")
-                        return payload, group_name
+                        return payload, group_name, extract_email(response)
                     if verbose:
                         logger.debug(
                             f"Init attempt ({attempts}) from {group_name} returned no init values."
@@ -503,8 +560,8 @@ async def get_access_token(
             return None
 
         if result := await try_jars(cookie_jars_to_test):
-            payload, group_name = result
-            return InitSession(*payload, client=client, cookie_source=group_name)
+            payload, group_name, email = result
+            return InitSession(*payload, client=client, cookie_source=group_name, email=email)
 
         # Phase 3: Fall back to a preflight request for consent/anonymous cookies, then
         # retry the same groups completed with the missing cookies, and finally guest mode
@@ -560,8 +617,13 @@ async def get_access_token(
             ]
             retries.append((Cookies(preflight_cookies), "Guest"))
             if result := await try_jars(retries):
-                payload, group_name = result
-                return InitSession(*payload, client=client, cookie_source=group_name)
+                payload, group_name, email = result
+                if authuser is not None and email is None:
+                    raise AuthError(
+                        f"authuser={authuser} requested, but only a guest session could be "
+                        "initialized. Please make sure cookie values are up to date."
+                    )
+                return InitSession(*payload, client=client, cookie_source=group_name, email=email)
 
         raise AuthError(
             f"Failed to initialize client after {attempts} attempts. SECURE_1PSIDTS "

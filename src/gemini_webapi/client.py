@@ -105,6 +105,12 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
         __Secure-1PSIDTS cookie value, some Google accounts don't require this value, provide only if it's in the cookie list.
     proxy: `str`, optional
         Proxy URL.
+    authuser: `int`, optional
+        Index of the Google account to act as, when several accounts are signed in to the same
+        cookie jar (Google multi-login), in browser sign-in order: 0 is the first account signed
+        in, 1 the second, and so on. Sent on every request, like `/u/<N>/app` in the browser.
+        `None` (default) uses the default account. Check `account_email` after `init()` to
+        confirm which account was selected.
     kwargs: `dict`, optional
         Additional arguments which will be passed to the http client.
         Refer to `curl_cffi.requests.AsyncSession` for more information.
@@ -131,7 +137,9 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
         "_sessionid",
         "_usage_info",
         "access_token",
+        "account_email",
         "account_status",
+        "authuser",
         "activity_task",
         "auto_close",
         "auto_refresh",
@@ -158,10 +166,13 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
         secure_1psid: str | None = None,
         secure_1psidts: str | None = None,
         proxy: str | None = None,
+        authuser: int | None = None,
         **kwargs,
     ):
         super().__init__()
         self.proxy = proxy
+        self.authuser: int | None = None if authuser is None else int(authuser)
+        self.account_email: str | None = None
         self.client: AsyncSession | None = None
         self.access_token: str | None = None
         self.build_label: str | None = None
@@ -306,9 +317,11 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                     verbose=self.verbose,
                     impersonate=impersonate,
                     verify=self.kwargs.get("verify", True),
+                    authuser=self.authuser,
                 )
 
                 init_session.client.timeout = timeout
+                self.account_email = init_session.email
                 self.client = init_session.client
                 self._cookie_source = init_session.cookie_source
                 self._cookies.update(self.client.cookies)
@@ -1476,6 +1489,8 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
         ]
 
         params: dict[str, Any] = {"hl": self.language, "_reqid": _reqid, "rt": "c"}
+        if self.authuser is not None:
+            params["authuser"] = self.authuser
         if self.build_label:
             params["bl"] = self.build_label
         if self.session_id:
@@ -2325,6 +2340,8 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                 "rt": "c",
                 "source-path": source_path,
             }
+            if self.authuser is not None:
+                params["authuser"] = self.authuser
             if self.build_label:
                 params["bl"] = self.build_label
             if self.session_id:

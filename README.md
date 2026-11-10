@@ -55,6 +55,7 @@ A reverse-engineered asynchronous Python wrapper for the [Google Gemini](https:/
   - [Conversations Across Multiple Turns](#conversations-across-multiple-turns)
   - [Continue Previous Conversations](#continue-previous-conversations)
   - [Read Conversation History](#read-conversation-history)
+  - [Edit a Previous Prompt](#edit-a-previous-prompt)
   - [Delete Previous Conversations from Gemini History](#delete-previous-conversations-from-gemini-history)
   - [Temporary Mode](#temporary-mode)
   - [Streaming Mode](#streaming-mode)
@@ -290,6 +291,27 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### Edit a Previous Prompt
+
+Gemini stores a chat as a tree of turns, and editing a prompt in the web app starts a new branch from the reply before it. `ChatSession.rewind` does the same: pass it a turn from `read_chat`, and the next message replaces that turn. The new branch becomes the chat's current one, so the replaced turn and everything after it drop out of `read_chat` and out of the model's context. Sending the original prompt again regenerates the reply.
+
+```python
+async def main():
+    history = await client.read_chat("c_...")
+    turns = list(reversed(history.turns))  # oldest first
+    prompts = [t for t in turns if t.role == "user"]
+
+    chat = client.start_chat(cid=history.cid)
+    chat.rewind(prompts[1])  # replace the second prompt and everything after it
+    response = await chat.send_message("A better second question")
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+Each `ChatTurn` from `read_chat` carries its turn id (`rid`) and `parent`, the `[cid, rid, rcid]` of the reply it follows (`None` for the first turn). A user prompt and the model reply to it share the same turn.
 
 ### Delete Previous Conversations from Gemini History
 

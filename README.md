@@ -162,6 +162,18 @@ async def main():
 asyncio.run(main())
 ```
 
+#### Multiple Google accounts (authuser)
+
+A browser signed in to several Google accounts keeps all of them in one set of cookies (Google multi-login) and picks one by its index in the sign-in order, the `N` in `gemini.google.com/u/N/app`. Pass the same index as `authuser` to act as that account. It is sent on every request, and `account_email` tells which account was selected:
+
+```python
+client = GeminiClient(Secure_1PSID, Secure_1PSIDTS, authuser=1)
+await client.init(timeout=30)
+print(client.account_email)  # the second account signed in to the browser
+```
+
+If no account is signed in at that index, `init()` raises `AuthError` rather than silently using the default account. Pass the browser's whole Google cookie jar (`client.cookies = {...}`) rather than only the two `__Secure-1PSID*` cookies when possible: Google is more likely to accept it on networks it has flagged.
+
 > [!TIP]
 >
 > `auto_close` and `close_delay` are optional arguments for automatically closing the client after a certain period of inactivity. This feature is disabled by default. In an always-on service like a chatbot, it's recommended to set `auto_close` to `True` with a reasonable `close_delay` value for better resource management.
@@ -788,6 +800,7 @@ You can also use a browser cookie extension export (array-of-objects format is s
 --cookies-json PATH    Path to cookies JSON file (required)
 --proxy URL            Proxy URL (or uses HTTPS_PROXY env)
 --model NAME           Model name, alias or id (default: your account's default model)
+--account-index N      Google account index (authuser) when the cookies hold several accounts
 --verbose              Enable debug logging
 --no-persist           Don't update cookies file after run
 --request-timeout SEC  HTTP timeout in seconds (default: 300)

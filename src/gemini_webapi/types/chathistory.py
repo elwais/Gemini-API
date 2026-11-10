@@ -16,12 +16,22 @@ class ChatTurn(BaseModel):
         The text content of the message.
     model_output: `ModelOutput`, optional
         The full model output if the role is "model". This contains candidates, images, and metadata.
+    rid: `str`, optional
+        Id of the conversation turn this message belongs to. A user prompt and the model reply
+        to it share one turn and therefore one `rid`.
+    parent: `list[str]`, optional
+        `[cid, rid, rcid]` of the reply this turn follows, or `None` for the first turn of the
+        chat. Gemini stores a chat as a tree of turns; pass the turn to
+        `ChatSession.rewind()` to send a replacement for it, as editing a prompt in the web
+        app does.
 
     """
 
     role: str
     text: str
     model_output: ModelOutput | None = None
+    rid: str = ""
+    parent: list[str] | None = None
 
     def __str__(self) -> str:
         return f"{self.role.upper()}: {shorten(self.text, width=100)}"

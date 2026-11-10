@@ -169,6 +169,16 @@ class ChatMixin:
                 chat_turns = []
                 for conv_turn in turns_data:
                     rid = get_nested_value(conv_turn, [0, 1], "")
+                    # Pointer to the reply this turn follows: [cid, rid, rcid], None on the first turn
+                    parent = get_nested_value(conv_turn, [1])
+                    if not (
+                        isinstance(parent, list)
+                        and len(parent) >= 3
+                        and all(isinstance(p, str) for p in parent[:3])
+                    ):
+                        parent = None
+                    else:
+                        parent = list(parent[:3])
 
                     if candidates_list := get_nested_value(conv_turn, [3, 0]):
                         output_candidates = []
@@ -252,11 +262,15 @@ class ChatMixin:
                                     role="model",
                                     text=model_output.text,
                                     model_output=model_output,
+                                    rid=rid,
+                                    parent=parent,
                                 )
                             )
 
                     if user_text := get_nested_value(conv_turn, [2, 0, 0], ""):
-                        chat_turns.append(ChatTurn(role="user", text=user_text))
+                        chat_turns.append(
+                            ChatTurn(role="user", text=user_text, rid=rid, parent=parent)
+                        )
 
                 return ChatHistory(cid=cid, turns=chat_turns)
 

@@ -59,6 +59,7 @@ from .types import (
     Candidate,
     ChatHistory,
     ChatInfo,
+    ChatTurn,
     Citation,
     DeepResearchDocument,
     DeepResearchPlan,
@@ -2621,6 +2622,48 @@ class ChatSession:
         self.last_output.chosen = index
         self.rcid = self.last_output.rcid
         return self.last_output
+
+    def rewind(self, turn: ChatTurn) -> None:
+        """Move this session back to just before `turn`, so that the next message replaces it.
+
+        This is what editing a prompt in the Gemini web app does: the next `send_message`
+        (or `send_message_stream`) is attached to the reply that `turn` followed, which starts
+        a new branch of the conversation. The new branch becomes the chat's current one, so
+        `turn` and every later turn drop out of `read_chat()` and out of the model's context.
+        Sending the original prompt again regenerates the reply.
+
+        Parameters
+        ----------
+        turn: `gemini_webapi.types.ChatTurn`
+            A user or model turn from `GeminiClient.read_chat()` (or `read_history()`) of this
+            chat. A user prompt and the reply to it rewind to the same point.
+
+        Raises
+        ------
+        `ValueError`
+            If `turn` did not come from `read_chat()`, or belongs to a different chat.
+
+        """
+        if not turn.rid:
+            raise ValueError("Turn has no id. Pass a turn from `GeminiClient.read_chat()`.")
+
+        if turn.parent:
+            cid, rid, rcid = turn.parent
+            if self.cid and self.cid != cid:
+                raise ValueError(f"Turn belongs to chat {cid!r}, not {self.cid!r}.")
+        else:
+            # The first turn of the chat: no reply to attach to, start a new root branch
+            if not self.cid:
+                raise ValueError(
+                    "Cannot rewind to the start of an unknown chat. Create the session with "
+                    "`start_chat(cid=...)` first."
+                )
+            cid, rid, rcid = self.cid, "", ""
+
+        metadata = DEFAULT_METADATA.copy()
+        metadata[0], metadata[1], metadata[2] = cid, rid, rcid
+        self.__metadata = metadata
+        self.last_output = None
 
     async def read_history(self, limit: int = 10) -> ChatHistory | None:
         """Fetch the conversation history for this session.

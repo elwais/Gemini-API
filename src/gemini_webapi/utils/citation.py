@@ -110,19 +110,31 @@ _BLOB_PREFIX = "blobstore://"
 def _file_source(citation_id: int, entry: Any) -> dict[str, Any] | None:
     """Resolve a `[cite: N]` that points at a file attached to the prompt.
 
-    A web source keeps its URL at `[3][0][1]`. An attachment does not: its entry carries the
-    file name at `[2]` and a `blobstore://` reference to the upload somewhere in the entry (`[5]`
-    in the layout seen so far). The name is the useful part for a reader, so it becomes the
+    A web source keeps its URL at `[3][0][1]`. An attachment does not: its entry carries the file name
+    at `[2]`, and a `blobstore://` reference (`[5]`) only when the reply is read live. Read back from
+    history the reference is null, so the status or MIME type marks it as an attachment instead. The name is the useful part for a reader, so it becomes the
     title, and the reference is kept as `uri`, since it is not a web address.
     """
     name = get_nested_value(entry, [2])
+    if not isinstance(name, str) or not name:
+        return None
+
+    # The reference is present when the reply is read live. Read back from history it is null, and
+    # the entry is still an attachment: it names an upload status or a MIME type. Require one of those,
+    # so a bare string in the same position is not taken for a file.
     uri = get_nested_value(entry, [5])
     if not isinstance(uri, str) or not uri.startswith(_BLOB_PREFIX):
         uri = next(
             (v for v in (entry or []) if isinstance(v, str) and v.startswith(_BLOB_PREFIX)),
             None,
         )
-    if uri is None or not isinstance(name, str) or not name:
+    status = get_nested_value(entry, [4, 2])
+    mime = get_nested_value(entry, [11])
+    attached = (
+        (isinstance(status, str) and "attachment" in status.lower())
+        or (isinstance(mime, str) and "/" in mime)
+    )
+    if uri is None and not attached:
         return None
     return {
         "id": citation_id,

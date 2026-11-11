@@ -32,6 +32,28 @@ FILE_FIELD = [[['[cite: 1]', 0],
      'flake.nix']]],
   ['`github:NixOS/nixpkgs/nixpkgs-unstable`', 0]]]
 
+READBACK_FIELD = [[['[cite: 1]', 0],
+  [[None,
+    [[None,
+      0,
+      'flake.nix',
+      None,
+      [3, None, 'File attachment was not previously registered'],
+      None,
+      None,
+      None,
+      1,
+      None,
+      None,
+      'application/octet-stream'],
+     None,
+     None,
+     None,
+     None,
+     None,
+     'flake.nix']]],
+  ['The `nixpkgs` input points to the following URL', 0]]]
+
 WEB_GROUP = [
     ["[cite: 2]", 0],
     [
@@ -50,6 +72,17 @@ class CitationFileTests(unittest.TestCase):
         self.assertEqual(cite["title"], "flake.nix")
         self.assertIsNone(cite["url"])
         self.assertTrue(cite["uri"].startswith("blobstore:///contrib_service/ttl_1d/"))
+
+    def test_readback_attachment_without_blob_resolves(self):
+        # Read back from history the blob reference is null; the status and MIME type still mark it.
+        found = extract_citations(READBACK_FIELD)
+        self.assertEqual([(c["id"], c["kind"], c["title"], c["uri"]) for c in found],
+                         [(1, "file", "flake.nix", None)])
+
+    def test_bare_name_without_attachment_markers_is_dropped(self):
+        entry = [None, 0, "notes.txt", None, None, None, None, None, None, None, None, None]
+        group = [["[cite: 6]", 0], [[None, [entry]]]]
+        self.assertEqual(extract_citations([group]), [])
 
     def test_citation_model_carries_file_fields(self):
         cite = Citation(**extract_citations(FILE_FIELD)[0])

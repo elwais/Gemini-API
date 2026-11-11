@@ -148,15 +148,23 @@ class ChatMixin:
         """
         return self._recent_chats
 
-    async def read_chat(self, cid: str, limit: int = 10) -> ChatHistory | None:
-        """Fetch the complete conversation history by chat ID, ordered from the latest turn to the oldest.
+    async def read_chat(
+        self, cid: str, limit: int = 10, cursor: str | None = None
+    ) -> ChatHistory | None:
+        """Fetch the conversation history by chat ID, ordered from the latest turn to the oldest.
+
+        Gemini returns at most `limit` turns per call. When older turns remain, the result's
+        `next_cursor` is set; pass it back as `cursor` to fetch the next, older page. Its
+        `next_cursor` is None once the first turn has been read.
 
         Parameters
         ----------
         cid: `str`
             The ID of the chat to read (e.g. "c_...").
         limit: `int`, optional
-            The maximum number of turns to fetch, by default 10.
+            The maximum number of turns per call, by default 10.
+        cursor: `str`, optional
+            The `next_cursor` of the previous page; omit it to start from the latest turn.
 
         Returns
         -------
@@ -171,7 +179,7 @@ class ChatMixin:
                 [
                     RPCData(
                         rpcid=GRPC.LIST_CONVERSATION_TURNS,
-                        payload=json.dumps([cid, limit, None, 1, [1], [4], None, 1]).decode(
+                        payload=json.dumps([cid, limit, cursor, 1, [1], [4], None, 1]).decode(
                             "utf-8"
                         ),
                     ),
@@ -295,7 +303,12 @@ class ChatMixin:
                             ChatTurn(role="user", text=user_text, rid=rid, parent=parent)
                         )
 
-                return ChatHistory(cid=cid, turns=chat_turns)
+                next_cursor = get_nested_value(part_body, [1])
+                return ChatHistory(
+                    cid=cid,
+                    turns=chat_turns,
+                    next_cursor=next_cursor if isinstance(next_cursor, str) and next_cursor else None,
+                )
 
             return None
         except Exception:

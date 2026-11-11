@@ -49,11 +49,15 @@ class ChatHistory(BaseModel):
         Chat ID.
     turns: `list[ChatTurn]`
         The list of messages in the conversation.
+    next_cursor: `str`, optional
+        Pass to `read_chat(cursor=...)` to read the next, older page. None when this page reaches
+        the first turn of the chat.
 
     """
 
     cid: str
     turns: list[ChatTurn]
+    next_cursor: str | None = None
 
     def __str__(self) -> str:
         return f"ChatHistory(cid={self.cid!r})"

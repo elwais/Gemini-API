@@ -46,7 +46,9 @@ def extract_citations(groups: Any) -> list[dict[str, Any]]:
     Returns
     -------
     `list[dict[str, Any]]`
-        One mapping per citation with keys `id`, `title`, `url` and `favicon`.
+        One mapping per citation with keys `id`, `kind` (`"web"` or `"file"`), `title`, `url`,
+        `favicon` and `uri`. A web source has a `url`; an attached file has its name as `title`
+        and its `blobstore://` reference as `uri`, with no `url`.
 
     """
     if not isinstance(groups, list):
@@ -55,7 +57,7 @@ def extract_citations(groups: Any) -> list[dict[str, Any]]:
     resolved: dict[int, dict[str, Any]] = {}
     for group in groups:
         marker = get_nested_value(group, [0, 0])
-        entries = get_nested_value(group, [1])
+        entries = _entry_list(get_nested_value(group, [1]))
         if not isinstance(marker, str) or not isinstance(entries, list):
             continue
 
@@ -66,14 +68,67 @@ def extract_citations(groups: Any) -> list[dict[str, Any]]:
 
             url = get_nested_value(entry, [3, 0, 1])
             title = get_nested_value(entry, [3, 0, 2])
-            if not isinstance(url, str):
+            if isinstance(url, str):
+                resolved[citation_id] = {
+                    "id": citation_id,
+                    "kind": "web",
+                    "title": title if isinstance(title, str) else None,
+                    "url": url,
+                    "favicon": get_nested_value(entry, [3, 0, 0]),
+                    "uri": None,
+                }
                 continue
 
-            resolved[citation_id] = {
-                "id": citation_id,
-                "title": title if isinstance(title, str) else None,
-                "url": url,
-                "favicon": get_nested_value(entry, [3, 0, 0]),
-            }
+            file_source = _file_source(citation_id, entry)
+            if file_source is not None:
+                resolved[citation_id] = file_source
 
     return [resolved[key] for key in sorted(resolved)]
+
+
+def _entry_list(sources: Any) -> Any:
+    """The list of sources a group publishes.
+
+    Web sources sit directly under the group. An attachment's sources sit one level down, in a
+    `[None, [...]]` pair, so the pair is unwrapped only when it has exactly that shape.
+    """
+    if (
+        isinstance(sources, list)
+        and len(sources) == 1
+        and isinstance(sources[0], list)
+        and len(sources[0]) == 2
+        and sources[0][0] is None
+        and isinstance(sources[0][1], list)
+    ):
+        return sources[0][1]
+    return sources
+
+
+_BLOB_PREFIX = "blobstore://"
+
+
+def _file_source(citation_id: int, entry: Any) -> dict[str, Any] | None:
+    """Resolve a `[cite: N]` that points at a file attached to the prompt.
+
+    A web source keeps its URL at `[3][0][1]`. An attachment does not: its entry carries the
+    file name at `[2]` and a `blobstore://` reference to the upload somewhere in the entry (`[5]`
+    in the layout seen so far). The name is the useful part for a reader, so it becomes the
+    title, and the reference is kept as `uri`, since it is not a web address.
+    """
+    name = get_nested_value(entry, [2])
+    uri = get_nested_value(entry, [5])
+    if not isinstance(uri, str) or not uri.startswith(_BLOB_PREFIX):
+        uri = next(
+            (v for v in (entry or []) if isinstance(v, str) and v.startswith(_BLOB_PREFIX)),
+            None,
+        )
+    if uri is None or not isinstance(name, str) or not name:
+        return None
+    return {
+        "id": citation_id,
+        "kind": "file",
+        "title": name,
+        "url": None,
+        "favicon": None,
+        "uri": uri,
+    }

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -11,26 +13,36 @@ class Citation(BaseModel):
     so without resolving them the markers are dead references - the reply text never names
     what it cites.
 
+    A `[cite: N]` can also point at a file the prompt attached. Those carry `kind="file"`,
+    the file name as `title`, and the upload's `blobstore://` reference as `uri`; they have no
+    `url`, since the file is not on the web.
+
     Parameters
     ----------
     id: `int`
         The number used by the `[cite: N]` markers that refer to this source.
+    kind: `str`
+        `"web"` for a page, `"file"` for an attached file.
     title: `str`, optional
-        Title of the page, as Gemini reports it.
+        Title of the page, or the file name for an attachment.
     url: `str`, optional
-        Address of the page.
+        Address of the page. None for an attachment.
     favicon: `str`, optional
         Icon for the site, when one is supplied.
+    uri: `str`, optional
+        Reference to the attached upload (`blobstore://...`). None for a web page.
 
     """
 
     id: int
+    kind: Literal["web", "file"] = "web"
     title: str | None = None
     url: str | None = None
     favicon: str | None = None
+    uri: str | None = None
 
     def __repr__(self) -> str:
-        return f"Citation(id={self.id!r}, title={self.title!r}, url={self.url!r})"
+        return f"Citation(id={self.id!r}, kind={self.kind!r}, title={self.title!r}, url={self.url!r})"
 
     def __str__(self) -> str:
         return f"[{self.id}] {self.title or self.url or ''}".strip()

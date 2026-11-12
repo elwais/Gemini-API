@@ -145,3 +145,27 @@ class CitationShapeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def _homework_entry(name: str) -> list:
+    """One attachment source as a multi-file group publishes it: wrapped as [None, [descriptor, ...]]."""
+    descriptor = [None, 11, name, None, [3, None, "File attachment was not previously registered"],
+                  None, None, None, 1, None, None, "application/pdf"]
+    return [None, [descriptor, None, None, None, None, None, name]]
+
+
+MULTI_FILE_FIELD = [
+    [["[cite: 4, 9, 13]", 0],
+     [_homework_entry("hw1.pdf"), _homework_entry("hw2.pdf"), _homework_entry("hw3.pdf")],
+     ["The homework is theoretical.", 0]],
+]
+
+
+class CitationMultiFileTests(unittest.TestCase):
+    def test_each_attachment_in_a_multi_file_group_resolves(self):
+        cites = extract_citations(MULTI_FILE_FIELD)
+        self.assertEqual([(c["id"], c["kind"], c["title"]) for c in cites],
+                         [(4, "file", "hw1.pdf"), (9, "file", "hw2.pdf"), (13, "file", "hw3.pdf")])
+
+    def test_single_file_group_still_resolves(self):
+        cites = extract_citations(FILE_FIELD)
+        self.assertEqual([(c["id"], c["title"]) for c in cites], [(1, "flake.nix")])

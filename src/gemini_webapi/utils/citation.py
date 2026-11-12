@@ -66,6 +66,7 @@ def extract_citations(groups: Any) -> list[dict[str, Any]]:
             if citation_id in resolved:
                 continue
 
+            entry = _unwrap_entry(entry)
             url = get_nested_value(entry, [3, 0, 1])
             title = get_nested_value(entry, [3, 0, 2])
             if isinstance(url, str):
@@ -84,6 +85,26 @@ def extract_citations(groups: Any) -> list[dict[str, Any]]:
                 resolved[citation_id] = file_source
 
     return [resolved[key] for key in sorted(resolved)]
+
+
+def _unwrap_entry(entry: Any) -> Any:
+    """The descriptor of one attachment source.
+
+    A group that cites several attachments wraps each source as `[None, [descriptor, ...]]`, where the
+    descriptor carries the file name at `[2]`. A group with a single attachment is unwrapped by
+    `_entry_list` before this point, so its entries are already descriptors and pass through here
+    unchanged. Web sources are not this shape and pass through too.
+    """
+    if (
+        isinstance(entry, list)
+        and len(entry) == 2
+        and entry[0] is None
+        and isinstance(entry[1], list)
+        and entry[1]
+        and isinstance(entry[1][0], list)
+    ):
+        return entry[1][0]
+    return entry
 
 
 def _entry_list(sources: Any) -> Any:

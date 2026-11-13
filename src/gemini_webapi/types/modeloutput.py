@@ -6,6 +6,7 @@ from .candidate import Candidate
 from .citation import Citation
 from .image import Image
 from .research import DeepResearchDocument, DeepResearchPlan
+from .served import ServedModel
 from .video import GeneratedMedia, GeneratedVideo
 
 
@@ -20,12 +21,16 @@ class ModelOutput(BaseModel):
         List of all candidates returned from gemini
     chosen: `int`, optional
         Index of the chosen candidate, by default will choose the first one
+    served: `ServedModel`, optional
+        The model Google served this reply with, set on the final output of a stream when the raw
+        response names exactly one known model. `None` when the response does not say.
 
     """
 
     metadata: list[str]
     candidates: list[Candidate]
     chosen: int = 0
+    served: ServedModel | None = None
 
     def __str__(self) -> str:
         return shorten(self.text, width=100)

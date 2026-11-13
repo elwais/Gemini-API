@@ -7,6 +7,7 @@ from .grpc import RPCData
 from .image import Image, WebImage, GeneratedImage
 from .video import Video, GeneratedVideo, GeneratedMedia
 from .modeloutput import ModelOutput
+from .served import ServedModel, pick_served, scan_served
 from .availablemodel import AvailableModel
 from .chatinfo import ChatInfo
 from .chathistory import ChatTurn, ChatHistory

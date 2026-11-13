@@ -55,6 +55,8 @@ from .exceptions import (
     UsageLimitExceededError,
 )
 from .types import (
+    pick_served,
+    scan_served,
     AvailableModel,
     Candidate,
     ChatHistory,
@@ -1391,6 +1393,9 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
             ):
                 yield output
 
+            if output is not None:
+                output.served = pick_served(session_state, self._model_registry)
+
             if output and isinstance(chat, ChatSession):
                 output.metadata = chat.metadata
                 chat.last_output = output
@@ -1877,6 +1882,8 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                         decoded_chunk = decoder.decode(chunk, final=False)
                         if self.verbose:
                             _raw_response_parts.append(decoded_chunk)
+                        if session_state is not None:
+                            scan_served(session_state, decoded_chunk, self._model_registry)
                         parsed_parts = stream_parser.feed(decoded_chunk)
 
                         got_update = False
@@ -1910,6 +1917,8 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                     final_decoded = decoder.decode(b"", final=True)
                     if self.verbose:
                         _raw_response_parts.append(final_decoded)
+                    if session_state is not None:
+                        scan_served(session_state, final_decoded, self._model_registry)
                     parsed_parts = stream_parser.feed(final_decoded)
                     parsed_parts.extend(stream_parser.flush())
                     async for out in _process_parts(parsed_parts):

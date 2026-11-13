@@ -40,6 +40,9 @@ class AvailableModel(BaseModel):
         false for all but the default model of a guest session. Defaults to `True`.
     aliases: `list[str]`, optional
         Alternative names and identifiers matching this model.
+    status_name: `str`, optional
+        The model's name field as the status entry gives it (e.g. "4 Hydrogen"). Empty for
+        models built from a dictionary. Kept separately because `display_name` is the tagline.
 
     """
 
@@ -52,6 +55,7 @@ class AvailableModel(BaseModel):
     model_number: int = 1
     is_available: bool = True
     aliases: list[str] = []
+    status_name: str = ""
 
     def __str__(self) -> str:
         return self.model_name or self.display_name
@@ -187,6 +191,9 @@ class AvailableModel(BaseModel):
             or get_nested_value(model_data, [19], "")
             or get_nested_value(model_data, [1], "")
         )
+        status_name = str(
+            get_nested_value(model_data, [1], "") or get_nested_value(model_data, [10], "")
+        )
         description = str(
             get_nested_value(model_data, [12], "") or get_nested_value(model_data, [2], "")
         )
@@ -218,6 +225,7 @@ class AvailableModel(BaseModel):
             model_number=model_number,
             is_available=is_available,
             aliases=aliases,
+            status_name=status_name,
         )
 
     @classmethod

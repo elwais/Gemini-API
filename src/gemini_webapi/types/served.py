@@ -44,7 +44,7 @@ def scan_served(state: dict, text: str, registry: dict[str, AvailableModel]) -> 
             continue
         if model_id in names:
             continue
-        for label in (model.display_name, model.model_name):
+        for label in (model.status_name, model.model_name, model.display_name):
             if label and any(q in buf for q in (f'"{label}"', f'\\"{label}\\"')):
                 names.add(model_id)
                 break
@@ -63,4 +63,6 @@ def pick_served(state: dict, registry: dict[str, AvailableModel]) -> ServedModel
     model = registry.get(model_id)
     if model is None:
         return None
-    return ServedModel(model_id=model_id, display_name=model.display_name or model.model_name, via=via)
+    # The served name is the model's name field (e.g. "4 Hydrogen"), not its tagline.
+    name = model.status_name or model.display_name or model.model_name
+    return ServedModel(model_id=model_id, display_name=name, via=via)

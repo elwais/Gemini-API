@@ -68,3 +68,20 @@ def test_model_output_carries_served_field():
     assert out.served is None
     out.served = ServedModel(model_id="x", display_name="X", via="id")
     assert out.served.via == "id"
+
+
+def test_served_name_is_the_status_name_not_the_tagline():
+    # A real RPC model: display_name is the tagline, status_name the name field.
+    real = AvailableModel(
+        model_id="fbb127bbb056c959", model_name="gemini-4-hydrogen", display_name="Everyday help",
+        description="", capacity=1, status_name="4 Hydrogen",
+    )
+    registry = {real.model_id: real}
+    state: dict = {}
+    scan_served(state, 'x "fbb127bbb056c959" y', registry)
+    got = pick_served(state, registry)
+    assert got is not None and got.display_name == "4 Hydrogen" and got.via == "id"
+    # The tagline appearing in ordinary text must not be taken as a served-name match.
+    state2: dict = {}
+    scan_served(state2, "This is Everyday help for you", registry)
+    assert pick_served(state2, registry) is None
